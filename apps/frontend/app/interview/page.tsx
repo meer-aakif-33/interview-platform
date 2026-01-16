@@ -42,7 +42,7 @@ export default function InterviewPage() {
 
   if (!sessionId) return null;
 
-  const submitEvaluation = async () => {
+const submitEvaluation = async () => {
   console.log("🧪 Submitting evaluation for session:", sessionId);
 
   const res = await fetch("http://localhost:4000/api/evaluate", {
@@ -53,12 +53,28 @@ export default function InterviewPage() {
 
   console.log("📊 Evaluation HTTP status:", res.status);
 
-  const report = await res.json();
+  // Read raw text first for debugging
+  const text = await res.text();
+  console.log("📊 Raw evaluation response:", text);
+
+  if (!text) {
+    throw new Error("Empty response from evaluation API");
+  }
+
+  let report;
+  try {
+    report = JSON.parse(text);
+  } catch (err) {
+    console.error("Invalid JSON:", text);
+    throw err;
+  }
+
   console.log("📊 Evaluation report:", report);
 
   sessionStorage.setItem("interviewReport", JSON.stringify(report));
   router.push("/results");
 };
+
 
 
   return (
