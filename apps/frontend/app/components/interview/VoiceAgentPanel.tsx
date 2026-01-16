@@ -35,11 +35,21 @@ export default function VoiceAgentPanel({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId, identity: "candidate" }),
     });
+    const data = await res.json();
+    console.log("LiveKit response:", data);
 
-    const { token, url } = await res.json();
+    // const { token, url } = await res.json();
 
-    console.log("🎟 Token parts:", token?.split(".")?.length);
+    const { token, url } = data;
+
+    if (typeof token !== "string") {
+      console.error("Invalid token type:", token);
+      throw new Error("LiveKit token must be a string");
+    }
+
+    console.log("🎟 Token parts:", token.split(".").length);
     console.log("🌍 LiveKit URL:", url);
+
 
     if (typeof token !== "string") {
       console.log("❌ Invalid token:", token);
