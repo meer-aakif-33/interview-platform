@@ -4,8 +4,8 @@ import { AccessToken } from "livekit-server-sdk";
 const router = Router();
 
 router.post("/token", async (req, res) => {
-  console.log("🔔 /api/livekit/token hit");
-  console.log("📥 Request body:", req.body);
+  console.log(" /api/livekit/token hit");
+  console.log("Request body:", req.body);
 
   const { sessionId, identity } = req.body;
 
@@ -35,17 +35,17 @@ router.post("/token", async (req, res) => {
   // 👇 IMPORTANT: await the JWT
   const jwt = await token.toJwt();
 
-  console.log("🎟 Generated JWT token:");
-  console.log(jwt);
-  console.log("🎟 Token type:", typeof jwt);
-  console.log("🎟 Token parts count:", jwt.split(".").length);
+  console.log("Generated JWT token:");
+  // console.log(jwt);
+  console.log("Token type:", typeof jwt);
+  // console.log("Token parts count:", jwt.split(".").length);
 
   const response = {
     token: jwt,
     url: process.env.LIVEKIT_URL,
   };
 
-  console.log("📤 Sending response to frontend:", response);
+  console.log("Sending response to frontend:", response);
 
   res.json(response);
 });

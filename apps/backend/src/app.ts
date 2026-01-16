@@ -8,7 +8,7 @@ import livekitRoutes from "./routes/livekit.js";
 const app = express();
 
 app.use((req, _res, next) => {
-  console.log(`➡️ ${req.method} ${req.url}`);
+  console.log(` ${req.method} ${req.url}`);
   next();
 });
 
