@@ -278,6 +278,245 @@
 #     )
 
 # apps/agent-python/agent.py
+# import asyncio
+# import os
+# import re
+# import json
+# from dotenv import load_dotenv
+
+# from livekit.agents import (
+#     AutoSubscribe,
+#     JobContext,
+#     WorkerOptions,
+#     cli,
+#     Agent
+# )
+
+# import google.generativeai as genai
+
+# # Load environment variables
+# load_dotenv()
+
+# # Configure Gemini
+# genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+
+
+# SYSTEM_PROMPT = """
+# You are a senior software engineer conducting a real coding interview.
+
+# Rules:
+# - Ask follow-up questions
+# - Challenge edge cases
+# - Ask complexity questions
+# - Do NOT give solutions
+# - Be concise and natural
+# """
+
+# QUESTION = (
+#     "Given an array of integers, return indices of two numbers "
+#     "that add up to a target."
+# )
+
+
+# async def publish(room, payload):
+#     await room.local_participant.publish_data(
+#         json.dumps(payload).encode("utf-8"),
+#         reliable=True
+#     )
+
+
+# async def entrypoint(ctx: JobContext):
+#     print("🧠 Agent entrypoint called")
+#     print("🔗 Connecting to LiveKit room...")
+
+#     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+
+#     print("✅ Connected to LiveKit")
+#     print("🏠 Room name:", ctx.room.name)
+
+#     session_id = ctx.room.name
+#     print("🎯 Interview session:", session_id)
+
+#     # Create agent
+#     agent = Agent(
+#         vad="default",
+#         stt="deepgram",
+#         tts="elevenlabs",
+#         llm="gemini",
+#         instructions=SYSTEM_PROMPT,
+#     )
+
+#     print("🤖 Agent created, starting session...")
+    
+#     # Use async with for agent session
+#     async with agent.start_session(ctx.room) as session:
+#         print("▶️ Agent session started")
+
+#         # Ask opening question
+#         print("🗣 Asking opening question")
+#         await session.say(QUESTION)
+
+#         await publish(ctx.room, {
+#             "type": "transcript",
+#             "speaker": "AGENT",
+#             "text": QUESTION,
+#             "final": True
+#         })
+#         print("📤 Opening question published")
+
+#         async for msg in session.listen():
+#             print("🎧 Raw message:", msg)
+
+#             text = msg.text.strip()
+#             print("🗣 Candidate said:", text)
+
+#             await publish(ctx.room, {
+#                 "type": "transcript",
+#                 "speaker": "CANDIDATE",
+#                 "text": text,
+#                 "final": True
+#             })
+
+#             if re.search(r"end (the )?interview|i'?m done", text, re.I):
+#                 print("🛑 Interview end detected")
+#                 closing = "Alright, ending the interview. Thank you."
+
+#                 await session.say(closing)
+
+#                 await publish(ctx.room, {
+#                     "type": "transcript",
+#                     "speaker": "AGENT",
+#                     "text": closing,
+#                     "final": True
+#                 })
+
+#                 await publish(ctx.room, {
+#                     "type": "control",
+#                     "action": "INTERVIEW_ENDED"
+#                 })
+#                 break
+
+#             print("🧠 Sending to Gemini:", text)
+
+#             response = genai.GenerativeModel("gemini-2.5-flash").generate_content(
+#                 f"You are an interviewer. Candidate said: {text}\n\nAsk a follow-up interview question."
+#             )
+
+#             reply = response.text.strip()
+#             print("🤖 Gemini replied:", reply)
+
+#             await session.say(reply)
+
+#             await publish(ctx.room, {
+#                 "type": "transcript",
+#                 "speaker": "AGENT",
+#                 "text": reply,
+#                 "final": True
+#             })
+
+#     print("🔚 Shutting down")
+#     await ctx.shutdown()
+    
+# if __name__ == "__main__":
+#     cli.run_app(
+#         WorkerOptions(
+#             entrypoint_fnc=entrypoint,
+#             agent_name="interviewer-agent"
+#         )
+#     )
+
+# apps/agent-python/agent.py
+# import asyncio
+# import os
+# import re
+# import json
+# from dotenv import load_dotenv
+
+# from livekit.agents import (
+#     AutoSubscribe,
+#     JobContext,
+#     WorkerOptions,
+#     cli,
+#     Agent,
+#     AgentSession,
+# )
+# from livekit.plugins import openai, deepgram, cartesia, silero
+# load_dotenv()
+
+# SYSTEM_PROMPT = """
+# You are a senior software engineer conducting a real coding interview.
+
+# Rules:
+# - Ask follow-up questions
+# - Challenge edge cases
+# - Ask complexity questions
+# - Do NOT give solutions
+# - Be concise and natural
+# """
+
+# QUESTION = (
+#     "Given an array of integers, return indices of two numbers "
+#     "that add up to a target."
+# )
+
+# async def entrypoint(ctx: JobContext):
+#     print("🧠 Agent entrypoint called")
+#     print("🔗 Connecting to LiveKit room...")
+
+#     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+
+#     print("✅ Connected to LiveKit")
+#     print("🏠 Room name:", ctx.room.name)
+
+#     session_id = ctx.room.name
+#     print("🎯 Interview session:", session_id)
+
+#     # Create AgentSession
+#     print("🤖 Creating AgentSession...")
+#     session = AgentSession(
+#         vad=silero.VAD.load(),
+#         stt=deepgram.STT(),
+#         llm=openai.LLM(
+#             model="llama-3.1-8b-instant",
+#             base_url="https://api.groq.com/openai/v1",
+#             api_key=os.getenv("GROQ_API_KEY"),
+#         ),
+#         tts=cartesia.TTS(),
+#     )
+
+#     # Create Agent with instructions
+#     agent = Agent(instructions=SYSTEM_PROMPT)
+
+#     print("▶️ Starting agent session...")
+#     await session.start(room=ctx.room, agent=agent)
+
+#     # IMPORTANT: Wait a moment for session to fully initialize
+#     await asyncio.sleep(1)
+
+#     # Ask opening question using say() instead of generate_reply()
+#     print("🗣 Asking opening question")
+#     await session.say(QUESTION)  # Changed this line
+
+#     # Publish transcript
+#     await ctx.room.local_participant.publish_data(
+#         json.dumps({
+#             "type": "transcript",
+#             "speaker": "AGENT",
+#             "text": QUESTION,
+#             "final": True
+#         }).encode("utf-8"),
+#         reliable=True
+#     )
+#     print("📤 Opening question published")
+# if __name__ == "__main__":
+#     cli.run_app(
+#         WorkerOptions(
+#             entrypoint_fnc=entrypoint,
+#             agent_name="interviewer-agent"
+#         )
+#     )
+
+# apps/agent-python/agent.py
 import asyncio
 import os
 import re
@@ -289,17 +528,12 @@ from livekit.agents import (
     JobContext,
     WorkerOptions,
     cli,
-    Agent
+    Agent,
+    AgentSession,
 )
+from livekit.plugins import deepgram, cartesia, openai, silero
 
-import google.generativeai as genai
-
-# Load environment variables
 load_dotenv()
-
-# Configure Gemini
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-
 
 SYSTEM_PROMPT = """
 You are a senior software engineer conducting a real coding interview.
@@ -318,13 +552,6 @@ QUESTION = (
 )
 
 
-async def publish(room, payload):
-    await room.local_participant.publish_data(
-        json.dumps(payload).encode("utf-8"),
-        reliable=True
-    )
-
-
 async def entrypoint(ctx: JobContext):
     print("🧠 Agent entrypoint called")
     print("🔗 Connecting to LiveKit room...")
@@ -337,86 +564,55 @@ async def entrypoint(ctx: JobContext):
     session_id = ctx.room.name
     print("🎯 Interview session:", session_id)
 
-    # Create agent
-    agent = Agent(
-        vad="default",
-        stt="deepgram",
-        tts="elevenlabs",
-        llm="gemini",
-        instructions=SYSTEM_PROMPT,
+    # Create AgentSession
+    print("🤖 Creating AgentSession...")
+    session = AgentSession(
+        vad=silero.VAD.load(),
+        stt=deepgram.STT(),
+        llm=openai.LLM(
+            model="llama-3.1-8b-instant",
+            base_url="https://api.groq.com/openai/v1",
+            api_key=os.getenv("GROQ_API_KEY"),
+        ),
+        tts=cartesia.TTS(),
     )
 
-    print("🤖 Agent created, starting session...")
-    
-    # Use async with for agent session
-    async with agent.start_session(ctx.room) as session:
-        print("▶️ Agent session started")
+    # Create Agent with instructions
+    agent = Agent(instructions=SYSTEM_PROMPT)
 
-        # Ask opening question
-        print("🗣 Asking opening question")
-        await session.say(QUESTION)
+    print("▶️ Starting agent session...")
+    await session.start(room=ctx.room, agent=agent)
 
-        await publish(ctx.room, {
+    # Wait for session to initialize
+    await asyncio.sleep(0.5)
+
+    # Ask opening question
+    print("🗣 Asking opening question")
+    await session.say(QUESTION)
+
+    # Publish transcript
+    await ctx.room.local_participant.publish_data(
+        json.dumps({
             "type": "transcript",
             "speaker": "AGENT",
             "text": QUESTION,
             "final": True
-        })
-        print("📤 Opening question published")
+        }).encode("utf-8"),
+        reliable=True
+    )
+    print("📤 Opening question published")
 
-        async for msg in session.listen():
-            print("🎧 Raw message:", msg)
-
-            text = msg.text.strip()
-            print("🗣 Candidate said:", text)
-
-            await publish(ctx.room, {
-                "type": "transcript",
-                "speaker": "CANDIDATE",
-                "text": text,
-                "final": True
-            })
-
-            if re.search(r"end (the )?interview|i'?m done", text, re.I):
-                print("🛑 Interview end detected")
-                closing = "Alright, ending the interview. Thank you."
-
-                await session.say(closing)
-
-                await publish(ctx.room, {
-                    "type": "transcript",
-                    "speaker": "AGENT",
-                    "text": closing,
-                    "final": True
-                })
-
-                await publish(ctx.room, {
-                    "type": "control",
-                    "action": "INTERVIEW_ENDED"
-                })
-                break
-
-            print("🧠 Sending to Gemini:", text)
-
-            response = genai.GenerativeModel("gemini-2.5-flash").generate_content(
-                f"You are an interviewer. Candidate said: {text}\n\nAsk a follow-up interview question."
-            )
-
-            reply = response.text.strip()
-            print("🤖 Gemini replied:", reply)
-
-            await session.say(reply)
-
-            await publish(ctx.room, {
-                "type": "transcript",
-                "speaker": "AGENT",
-                "text": reply,
-                "final": True
-            })
-
-    print("🔚 Shutting down")
-    await ctx.shutdown()
+    # CRITICAL: Keep the session alive - don't exit entrypoint
+    # The session will handle everything automatically from here
+    print("✅ Agent session running, waiting for interactions...")
     
+    # Wait indefinitely - the session manages its own lifecycle
+    try:
+        await asyncio.Future()  # Run forever until cancelled
+    except asyncio.CancelledError:
+        print("🔚 Session cancelled, shutting down")
+
+
 if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
