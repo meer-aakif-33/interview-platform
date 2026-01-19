@@ -1,3 +1,4 @@
+//apps/frontend/app/components/interview/CodeEditorPanel.tsx
 "use client";
 
 import Editor from "@monaco-editor/react";

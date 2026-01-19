@@ -1,3 +1,4 @@
+//apps/frontend/app/components/interview/TranscriptPanel.tsx
 "use client";
 
 import { useEffect, useRef } from "react";
