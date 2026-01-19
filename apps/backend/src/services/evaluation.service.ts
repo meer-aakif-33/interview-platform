@@ -1,8 +1,9 @@
 // apps/backend/src/services/evaluation.service.ts
-import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY!
+const openai = new OpenAI({
+  baseURL: "https://api.groq.com/openai/v1",
+  apiKey: process.env.GROQ_API_KEY!
 });
 
 interface Input {
@@ -29,7 +30,6 @@ function hasMeaningfulCode(code: string) {
   // Very small code usually means no real attempt
   return cleaned.length > 10;
 }
-
 
 function hasMeaningfulAnswers(transcripts: any[]) {
   return transcripts.some(
@@ -70,7 +70,6 @@ Use this exact schema:
 }
 `;
 
-
 export async function runEvaluation(input: Input) {
   const participated = hasAnyParticipation(input);
 
@@ -90,11 +89,16 @@ export async function runEvaluation(input: Input) {
     };
   }
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: `
-${SYSTEM_PROMPT}
-
+  const response = await openai.chat.completions.create({
+    model: "llama-3.1-8b-instant",
+    messages: [
+      {
+        role: "system",
+        content: SYSTEM_PROMPT
+      },
+      {
+        role: "user",
+        content: `
 Question:
 ${input.question}
 
@@ -108,19 +112,21 @@ ${
     : "(No transcript)"
 }
 `
+      }
+    ],
+    temperature: 0.3,
   });
 
-  const text =
-    response.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = response.choices[0]?.message?.content;
 
   if (!text) {
-    throw new Error("Gemini returned no text");
+    throw new Error("Groq returned no text");
   }
 
   const result = extractJSON(text);
 
   if (!result) {
-    throw new Error("Failed to extract JSON from Gemini response");
+    throw new Error("Failed to extract JSON from Groq response");
   }
 
   return result;
