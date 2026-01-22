@@ -25,6 +25,7 @@ function hasMeaningfulCode(code: string) {
   const cleaned = code
     .replace(/\/\/.*$/gm, "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/ Write your solution here/gi, "")
     .trim();
 
   // Very small code usually means no real attempt
@@ -48,26 +49,64 @@ function hasAnyParticipation(input: Input) {
 }
 
 const SYSTEM_PROMPT = `
-You must return ONLY valid JSON.
-Do not include markdown. Do not include explanations outside JSON.
+You are an expert technical interviewer analyzing a coding interview.
 
-If the candidate:
-- Spoke but did not write code → focus on coding gaps.
-- Wrote code but spoke very little → focus on communication.
-- Did neither → be direct and state lack of participation.
-- Did both → provide full evaluation.
+Provide DETAILED, SPECIFIC feedback with EVIDENCE from the code and conversation.
 
-Do NOT hallucinate strengths if no real attempt exists.
-
-Use this exact schema:
+Return ONLY valid JSON with this schema:
 
 {
-  "strengths": string[],
-  "improvements": string[],
-  "missingEdgeCases": string[],
-  "communication": string,
+  "overallScore": number (1-10),
+  "strengths": [
+    {
+      "aspect": string,
+      "evidence": string (quote from code or transcript),
+      "explanation": string
+    }
+  ],
+  "improvements": [
+    {
+      "issue": string,
+      "evidence": string (quote from code or transcript),
+      "suggestion": string
+    }
+  ],
+  "transcriptMistakes": [
+    {
+      "transcriptIndex": number,
+      "speaker": "CANDIDATE" | "AGENT",
+      "quote": string,
+      "issue": string,
+      "betterResponse": string
+    }
+  ],
+  "codeAnalysis": {
+    "correctness": string (detailed analysis),
+    "bugs": [
+      {
+        "lineNumber": number,
+        "line": string (code snippet),
+        "issue": string,
+        "fix": string
+      }
+    ],
+    "timeComplexity": string,
+    "spaceComplexity": string,
+    "missingEdgeCases": string[]
+  },
+  "communicationAnalysis": {
+    "clarity": string (with examples from transcript),
+    "thinkingProcess": string,
+    "questionAsking": string
+  },
   "nextSteps": string[]
 }
+
+IMPORTANT:
+- For bugs, include the actual LINE NUMBER (estimate based on typical code structure)
+- For transcriptMistakes, include the TRANSCRIPT INDEX (1-based) from the conversation
+- Quote EXACT text from code and transcripts
+- Be SPECIFIC, not generic
 `;
 
 export async function runEvaluation(input: Input) {
@@ -75,16 +114,31 @@ export async function runEvaluation(input: Input) {
 
   if (!participated) {
     return {
+      overallScore: 1,
       strengths: [],
       improvements: [
-        "The candidate did not provide spoken answers or attempt to write code."
+        {
+          issue: "No participation",
+          evidence: "No code written, no verbal communication",
+          suggestion: "Try solving even partially and explain your thought process"
+        }
       ],
-      missingEdgeCases: [],
-      communication: "No communication or problem-solving attempt was observed.",
+      codeAnalysis: {
+        correctness: "No code submitted",
+        bugs: [],
+        timeComplexity: "N/A",
+        spaceComplexity: "N/A",
+        missingEdgeCases: []
+      },
+      communicationAnalysis: {
+        clarity: "No communication observed",
+        thinkingProcess: "Not demonstrated",
+        questionAsking: "No questions asked"
+      },
       nextSteps: [
-        "Encourage the candidate to try solving even partially.",
-        "Practice thinking out loud while coding.",
-        "Start with small examples before attempting full solutions."
+        "Practice thinking out loud while coding",
+        "Start with simple examples",
+        "Ask clarifying questions"
       ]
     };
   }
@@ -99,18 +153,21 @@ export async function runEvaluation(input: Input) {
       {
         role: "user",
         content: `
-Question:
+Problem:
 ${input.question}
 
-Code:
+Candidate's Code:
+\`\`\`
 ${input.code || "(No code written)"}
+\`\`\`
 
-Transcript:
-${
-  input.transcripts.length
-    ? input.transcripts.map((t) => `${t.speaker}: ${t.text}`).join("\n")
-    : "(No transcript)"
-}
+Full Conversation Transcript:
+${input.transcripts.length
+            ? input.transcripts.map((t, i) => `[${i + 1}] ${t.speaker}: ${t.text}`).join("\n")
+            : "(No conversation)"
+          }
+
+Analyze THOROUGHLY with specific evidence.
 `
       }
     ],

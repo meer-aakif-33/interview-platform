@@ -7,142 +7,238 @@ import {
   Room,
   RoomEvent,
   createLocalAudioTrack,
-  ConnectionState,
 } from "livekit-client";
 
 interface Props {
   sessionId: string;
+  onCallStarted: () => void;
   onEnd: () => void;
   onPartialTranscript: (speaker: "AGENT" | "CANDIDATE", text: string) => void;
   onFinalTranscript: (speaker: "AGENT" | "CANDIDATE", text: string) => void;
+  onQuestionUpdate?: (question: string) => void;
 }
 
 export default function VoiceAgentPanel({
   sessionId,
+  onCallStarted,
   onEnd,
   onPartialTranscript,
   onFinalTranscript,
+  onQuestionUpdate,
 }: Props) {
   const roomRef = useRef<Room | null>(null);
   const [connected, setConnected] = useState(false);
   const [muted, setMuted] = useState(false);
 
-const startCall = async () => {
-  console.log("🚀 Starting call for session:", sessionId);
+  const startCall = async () => {
+    console.log("🚀 Starting call for session:", sessionId);
 
-  const res = await fetch("http://localhost:4000/api/livekit/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, identity: "candidate" }),
-  });
-  const data = await res.json();
-  console.log("LiveKit response:", data);
+    console.log("🎟 Requesting LiveKit token with payload:");
+    const payload = {
+      sessionId: sessionId,
+      identity: "candidate",
+    };
+    console.log(payload);
 
-  const { token, url } = data;
-
-  if (typeof token !== "string") {
-    console.error("Invalid token type:", token);
-    throw new Error("LiveKit token must be a string");
-  }
-
-  console.log("🎟 Token parts:", token.split(".").length);
-  console.log("🌍 LiveKit URL:", url);
-
-  const room = new Room({
-    adaptiveStream: true,
-    dynacast: true,
-  });
-
-  roomRef.current = room;
-
-  // Connection lifecycle
-  room.on(RoomEvent.ConnectionStateChanged, (state) => {
-    console.log("🔌 Connection state:", state);
-  });
-
-  room.on(RoomEvent.Disconnected, (reason) => {
-    console.log("❌ Disconnected from LiveKit:", reason);
-  });
-
-  room.on(RoomEvent.Reconnecting, () => {
-    console.warn("⚠️ Reconnecting to LiveKit...");
-  });
-
-  room.on(RoomEvent.Reconnected, () => {
-    console.log("✅ Reconnected to LiveKit");
-  });
-
-  // 🔊 AUDIO TRACK SUBSCRIPTION - ADD THIS
-  room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-    console.log("🎵 Track subscribed:", track.kind, "from", participant.identity);
-    
-    if (track.kind === "audio") {
-      const audioElement = track.attach();
-      document.body.appendChild(audioElement);
-      console.log("🔊 Audio element attached and playing");
+    let res: Response;
+    try {
+      res = await fetch("http://localhost:4000/api/livekit/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: sessionId, identity: "candidate" }),
+      });
+    } catch (err) {
+      console.error("❌ Network error while calling backend:", err);
+      throw err;
     }
-  });
 
-  room.on(RoomEvent.TrackPublished, (publication, participant) => {
-    console.log("📢 Track published:", publication.kind, "from", participant.identity);
-  });
+    console.log("🌐 HTTP status:", res.status);
+    console.log("🌐 HTTP ok?:", res.ok);
 
-  console.log("🔗 Connecting to LiveKit...");
-  await room.connect(url, token);
-  console.log("✅ Connected to LiveKit");
+    const rawText = await res.text();
+    console.log("🧪 Raw backend response:", rawText);
 
-  console.log("🎤 Creating local mic track...");
-  const micTrack = await createLocalAudioTrack();
-  await room.localParticipant.publishTrack(micTrack);
-  console.log("🎙 Mic published");
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      console.error("❌ Backend did not return valid JSON:", rawText);
+      throw e;
+    }
 
-  // Debug participants
-  room.on(RoomEvent.ParticipantConnected, (p) => {
-    console.log("👤 Participant joined:", p.identity);
-  });
+    console.log("📦 Parsed backend JSON:", data);
 
-  room.on(RoomEvent.ParticipantDisconnected, (p) => {
-    console.log("👤 Participant left:", p.identity);
-  });
+    const { token, url } = data;
 
-  // Debug data messages
-  room.on(RoomEvent.DataReceived, (payload) => {
-    const decoded = new TextDecoder().decode(payload);
-    console.log("📩 Raw DataReceived:", decoded);
+    console.log("🔑 Extracted token:", token);
+    console.log("🌍 Extracted url:", url);
 
-    const msg = JSON.parse(decoded);
-    console.log("📨 Parsed message:", msg);
+    if (!token) {
+      console.error("❌ Token is missing from backend response");
+      console.error("Full response object:", data);
+      throw new Error("Backend did not return a token field");
+    }
 
-    if (msg.type === "transcript") {
-      if (msg.final) {
-        console.log("🧾 Final transcript:", msg.text);
-        onFinalTranscript(msg.speaker, msg.text);
+    if (typeof token !== "string") {
+      console.error("❌ Invalid token type:", typeof token, token);
+      throw new Error("LiveKit token must be a string");
+    }
 
-        fetch(`http://localhost:4000/api/session/${sessionId}/transcript`, {
+    if (!url) {
+      console.error("❌ LiveKit URL missing from backend response");
+      throw new Error("Backend did not return LiveKit URL");
+    }
+
+    console.log("🎟 Token parts:", token.split(".").length);
+    console.log("🌍 LiveKit URL:", url);
+
+    const room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+    });
+
+    roomRef.current = room;
+
+    /* ---------- Connection debug ---------- */
+    room.on(RoomEvent.ConnectionStateChanged, (state) => {
+      console.log("🔌 Connection state:", state);
+    });
+
+    room.on(RoomEvent.Disconnected, (reason) => {
+      console.log("❌ Disconnected from LiveKit:", reason);
+    });
+
+    room.on(RoomEvent.Reconnecting, () => {
+      console.warn("⚠️ Reconnecting to LiveKit...");
+    });
+
+    room.on(RoomEvent.Reconnected, () => {
+      console.log("✅ Reconnected to LiveKit");
+    });
+
+    /* ---------- Participant debug ---------- */
+    room.on(RoomEvent.ParticipantConnected, (p) => {
+      console.log("👤 Participant joined:", p.identity);
+    });
+
+    room.on(RoomEvent.ParticipantDisconnected, (p) => {
+      console.log("👤 Participant left:", p.identity);
+    });
+
+    /* ---------- Track debug ---------- */
+    room.on(RoomEvent.TrackPublished, (publication, participant) => {
+      console.log(
+        "📢 Track published:",
+        publication.kind,
+        "from",
+        participant.identity
+      );
+    });
+
+    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      console.log(
+        "🎵 Track subscribed:",
+        track.kind,
+        "from",
+        participant.identity
+      );
+
+      if (track.kind === "audio") {
+        const audioEl = track.attach();
+        document.body.appendChild(audioEl);
+        console.log("🔊 Audio element attached and playing");
+      }
+    });
+    async function saveTranscript(sessionId: string, speaker: string, text: string) {
+      try {
+        await fetch(`http://localhost:4000/api/session/${sessionId}/transcript`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            speaker: msg.speaker,
-            text: msg.text,
-          }),
-        }).then(() => console.log("💾 Transcript saved to backend"));
-      } else {
-        console.log("✏️ Partial transcript:", msg.text);
-        onPartialTranscript(msg.speaker, msg.text);
+          body: JSON.stringify({ speaker, text }),
+        });
+      } catch (err) {
+        console.error("❌ Failed to save transcript:", err);
       }
     }
 
-    if (msg.type === "control" && msg.action === "INTERVIEW_ENDED") {
-      console.warn("🛑 Interview ended by agent");
-      room.disconnect();
-      setConnected(false);
-      onEnd();
-    }
-  });
+    /* ---------- Data channel debug ---------- */
+    room.on(RoomEvent.DataReceived, async (payload, participant) => {
+      const decoded = new TextDecoder().decode(payload);
+      console.log("📩 DataReceived event");
+      console.log("   From:", participant?.identity);
+      console.log("   Raw:", decoded);
 
-  setConnected(true);
-  console.log("🟢 Call fully initialized");
-};
+      let msg;
+      try {
+        msg = JSON.parse(decoded);
+      } catch {
+        console.error("❌ Invalid JSON payload:", decoded);
+        return;
+      }
+
+      console.log("📨 Parsed message:", msg);
+
+      /* ----------- QUESTION UPDATE ----------- */
+      if (msg.type === "question_update") {
+        console.log("🔄 Question update received:", msg.question);
+        if (onQuestionUpdate && msg.question) {
+          onQuestionUpdate(msg.question);
+        }
+      }
+
+      /* ----------- TRANSCRIPT HANDLING ----------- */
+      if (msg.type === "transcript") {
+        const speaker: "AGENT" | "CANDIDATE" =
+          msg.speaker?.toUpperCase() === "AGENT" ? "AGENT" : "CANDIDATE";
+
+        if (!msg.text) {
+          console.warn("⚠️ Transcript without text:", msg);
+          return;
+        }
+        // 🔥 Save to backend session store
+        await saveTranscript(sessionId, speaker, msg.text);
+
+        if (msg.final) {
+          console.log("🧾 Final transcript:", speaker, msg.text);
+          onFinalTranscript(speaker, msg.text);
+        } else {
+          console.log("✏️ Partial transcript:", speaker, msg.text);
+          onPartialTranscript(speaker, msg.text);
+        }
+      }
+      /* ----------- CONTROL MESSAGES ----------- */
+      if (msg.type === "control" && msg.action === "INTERVIEW_ENDED") {
+        console.warn("🛑 Interview ended by agent");
+        room.disconnect();
+        setConnected(false);
+        onEnd();
+      }
+
+    });
+
+    console.log("🔗 Connecting to LiveKit...");
+    await room.connect(url, token);
+    console.log("✅ Connected to LiveKit");
+
+    console.log("🎤 Creating local mic track...");
+    console.log("📢 Sending CLIENT_READY signal");
+    await room.localParticipant.publishData(
+      new TextEncoder().encode(
+        JSON.stringify({ type: "control", action: "CLIENT_READY" })
+      ),
+      { reliable: true }
+    );
+
+    const micTrack = await createLocalAudioTrack();
+    await room.localParticipant.publishTrack(micTrack);
+
+    console.log("🎙 Mic published");
+
+    setConnected(true);
+    onCallStarted();
+    console.log("🟢 Call fully initialized");
+  };
+
 
   const toggleMute = () => {
     if (!roomRef.current) return;

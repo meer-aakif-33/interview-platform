@@ -25,7 +25,6 @@ export default function TranscriptPanel({
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
-      {/* Final transcript history */}
       {transcripts.map((t, i) => (
         <div key={i}>
           <span className="font-semibold">
@@ -35,7 +34,6 @@ export default function TranscriptPanel({
         </div>
       ))}
 
-      {/* Live (partial) transcript */}
       {liveTranscript && (
         <div className="opacity-60 italic">
           <span className="font-semibold">
@@ -49,3 +47,4 @@ export default function TranscriptPanel({
     </div>
   );
 }
+
