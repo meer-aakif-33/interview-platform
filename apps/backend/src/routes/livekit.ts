@@ -12,7 +12,8 @@ const roomService = new RoomServiceClient(
 
 router.post("/token", async (req, res) => {
   console.log("📞 /api/livekit/token hit");
-  
+    console.log("📦 Raw body:", req.body);
+
   const { sessionId, identity } = req.body;
 
   if (!sessionId || !identity) {
